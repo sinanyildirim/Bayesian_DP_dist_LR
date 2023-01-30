@@ -51,7 +51,7 @@ The other key parameters are as follows:
   - Input - $\epsilon$, $\delta$
   - Output - noise standard deviation
 
- - 'fourth_central_moment_norm.m':  Calculates fourth-order central moments of the normal distribution with covariance $C$ using the method from Triantafyllopoulos (2002, Moments and cumulants of multivariate real and complex Gaussian distributions)
+ - `fourth_central_moment_norm.m`:  Calculates fourth-order central moments of the normal distribution with covariance $C$ using the method from Triantafyllopoulos (2002, Moments and cumulants of multivariate real and complex Gaussian distributions)
    - Input - $C$, the covariance matrix
    - Output - $M$, fourth moments of the distribution, $S$ the covariance of the vectorised form of $XX^T$ when $X \sim \mathcal{N}(0, C)$.
 
