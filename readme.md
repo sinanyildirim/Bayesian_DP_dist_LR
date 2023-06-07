@@ -12,7 +12,7 @@ The main file for conducting the experiments is `main_run_tests_DP_LR`. In this 
 - Options for `algo_to_run`: [MCMC-normalX, MCMC-fixedS, adaSSP, Bayes-fixedS-fast, MCMC-B\&S].
 
 #### 
-The code main_run_tests_DP_LR.m runs the function `main_DP_LR_simul_fn.m` to conduct the experiments. This file runs the experiments and outputs the name of the relevant output file. If the option show_results = 1 is chosen, it skips running the experiments.
+The code `main_run_tests_DP_LR.m` runs the function `main_DP_LR_simul_fn.m` to conduct the experiments. This file runs the experiments and outputs the name of the relevant output file. If the option show_results = 1 is chosen, it skips running the experiments.
 The other key parameters are as follows: 
 - $n$ - number of rows
 - $d$ - number of features
@@ -64,7 +64,7 @@ The code main_MMD_calculations calculates and plots the squared MMD estimates be
   - Input - matrix
   - Output - closest positive semi-definite matrix of the input matrix
   
--  `MMD': This function estimates the squared Maximum mean discrepancy value between two distributions when samples from those distributions are provided as inputs
-  - Input - $x$, $y$ (samples from the two distributions between which MMD is to be estimated), $h$ (bandwidth parameter) $D1$, $D2$, $D3$ (the three terms (if their values are known) whose sum gives the answer - all of them are optional).
-  - Output - squared MMD estimate.
+-  `MMD`: This function estimates the squared Maximum mean discrepancy value between two distributions when samples from those distributions are provided as inputs. 
+	- Input - $x$, $y$ (samples from the two distributions between which MMD is to be estimated), $h$ (bandwidth parameter) $D1$, $D2$, $D3$ (the three terms (if their values are known) whose sum gives the answer - all of them are optional). 
+	- Output - squared MMD estimate.
 
