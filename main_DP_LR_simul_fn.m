@@ -6,6 +6,18 @@ function outputfile = main_DP_LR_simul_fn(simul_or_real, dataname, ...
 %
 % Runs the experiments
 
+%% outputfile name
+outputfile = [sprintf('DP_LR_%s_%s_n_%d_d_%d_M_%d_K_%d_L_%d', simul_or_real, dataname, N_train, d, M, K, L_avg) ...
+    '_alg_', sprintf('%d', algo_to_run), ...
+    '_J', sprintf('_%d', J_vec)...
+    '_eps', sprintf('_%d', 10*epsilon_vec)];
+
+%% If run empty, exit here with the name of the outputfile (for plotting purposes)
+if run_empty == 1
+    return;
+end
+
+% If not run empty, run experiments
 rng(rng_no);
 
 % Num of nodes: Distributed for J > 1.
@@ -59,17 +71,6 @@ end
 delta = 1/N_train;
 D = d^2 + d + 1; % dimension of SS =  [X'X, X'Y, Y'Y]
 
-%% outputfile name
-outputfile = [sprintf('DP_LR_%s_%s_n_%d_d_%d_M_%d_K_%d_L_%d', simul_or_real, dataname, N_train, d, M, K, L_avg) ...
-    '_alg_', sprintf('%d', algo_to_run), ...
-    '_J', sprintf('_%d', J_vec)...
-    '_eps', sprintf('_%d', 10*epsilon_vec)];
-
-%% If run empty, exit here with the name of the outputfile (for plotting purposes)
-if run_empty == 1
-    return;
-end
-
 %% Determine bound_X and bound_Y
 bound_X = max(sum(X_train.^2, 2))^0.5;
 bound_Y = max(abs(Y_train));
@@ -88,9 +89,36 @@ end
 %% model hyperparameters
 
 % Model hyperparameters
-hyperparams = struct('Lambda', Lambda, 'kappa', d+1, 'a', 20, 'b', 0.5, ...
-    'm', zeros(d, 1), 'C', 0.5/(20-1)*eye(d));
+a_0 = 20; b_0 = 0.5; lambda_0 = b_0/(a_0-1)*eye(d); C = (a_0-1)/b_0*eye(d); m = zeros(d, 1);
+hyperparams = struct('Lambda', Lambda, 'kappa', d+1, 'a', a_0, 'b', b_0, ...
+    'm', m, 'C', C, 'lambda_0', lambda_0);
 
+
+%%  non-private estimation
+S_true = X_train'*X_train;
+Z_true = X_train'*Y_train;
+Y2_true = Y_train'*Y_train;
+
+lambda_n = S_true + lambda_0;
+lambda_n = (lambda_n + lambda_n')/2;
+
+mu_n = lambda_n\Z_true;
+a_n = a_0 + N_train/2;
+b_n = b_0 + 0.5*(Y2_true + m'*lambda_0*m -  mu_n'*lambda_n*mu_n);
+% Ensure it is at least b_0
+b_n = max(b_n, b_0);
+
+% now calculate the moments
+mu_theta_nonDP = mu_n;
+Cov_theta_nonDP = (b_n/(a_n-1))*eye(d)/lambda_n;
+if strcmp(simul_or_real, 'real') == 1
+    MSE_nonDP = mean((mu_theta_nonDP - theta_OLS).^2);
+    Pred_nonDP = mean((Y_test - X_test*mu_theta_nonDP).^2);
+elseif strcmp(simul_or_real, 'simul') == 1
+    MSE_nonDP = mean((mu_theta_nonDP - theta_true).^2);
+    Pred_nonDP = trace(Sigma_X*(mu_theta_nonDP - theta_true)*(mu_theta_nonDP - theta_true)');
+end
+%%
 % The parameters of adaSSP
 DP_params = struct('bound_X', bound_X, 'bound_Y', bound_Y, 'p', 0.05, 'delta', delta);
 
@@ -101,7 +129,10 @@ t_burn = K/2;
 MSE_reps = zeros(L_J, L_eps, M, n_alg);
 Pred_reps = zeros(L_J, L_eps, M, n_alg);
 Time_reps = zeros(L_J, L_eps, M, n_alg);
-        
+mu_thetas = cell(L_J, L_eps, M, n_alg);
+cov_thetas = cell(L_J, L_eps, M, n_alg);
+Theta_samps = cell  (L_J, L_eps, M, n_alg);
+    
 for i1 = 1:L_J
 
     % get the number of nodes
@@ -112,7 +143,26 @@ for i1 = 1:L_J
     N_last = N_train - (J-1)*N_node0;
     N_node = [N_node0*ones(1, J-1) N_last];
     N_node_cumul = [0 cumsum(N_node)];
+
+    %% Generate the distributed data
+    Sd = cell(1, J);
+    Zd = cell(1, J);
+    Y2d = cell(1, J);
     
+    for j = 1:J
+        node_rows = N_node_cumul(j)+1:N_node_cumul(j+1);
+    
+        X_node = X_train(node_rows, :);
+        Y_node = Y_train(node_rows);
+    
+        % construct S = X'X
+        Sd{j} = X_node'*X_node;
+        % construct Z = X'y
+        Zd{j} = X_node'*Y_node;
+        % construct Y^TY
+        Y2d{j} = Y_node'*Y_node;        
+    end
+
     % The proposal parameters for MCMC
     MCMC_prop_params.a_MH = 10.^(2*(log10(N_node)-1));
     MCMC_prop_params.sigma_q_y = 0.1;
@@ -124,19 +174,19 @@ for i1 = 1:L_J
         DP_params.epsilon = epsilon;
 
         % arrange the DP parameters
-        sigma_unit1 = analytic_Gaussian_mech(epsilon, delta);
-        sigma_unit2 = analytic_Gaussian_mech(epsilon/2, delta/2);
-        
+        if epsilon == inf
+            sigma_unit1 = 0;
+            sigma_unit2 = 0;
+        else
+            sigma_unit1 = analytic_Gaussian_mech(epsilon, delta);
+            sigma_unit2 = analytic_Gaussian_mech(epsilon/2, delta/2);
+        end
+
         std_SS = sigma_unit1*bound_SS;
         std_SZ = sigma_unit1*bound_SZ;
         std_S1 = sigma_unit2*bound_X^2;
         std_Z1 = sigma_unit2*bound_X*bound_Y;
-        
-%         std_SS = sqrt(log(2/delta))*bound_SS/epsilon;
-%         std_S1 = sqrt(log(4/delta))*bound_X^2/(epsilon/2);
-%         std_Z1 = sqrt(log(4/delta))*bound_X*bound_Y/(epsilon/2);
-%         std_SZ = sqrt(log(2/delta))*bound_SZ/epsilon;
-        
+                
         if std_S1^2 + std_Z1^2 > std_SZ^2
             std_S = std_SZ;
             std_Z = std_SZ;
@@ -149,33 +199,19 @@ for i1 = 1:L_J
         % Set the hyperparameters
         hyperparams.var_S = std_S^2;
         hyperparams.var_Z = std_Z^2;        
-        hyperparams.var_SS = std_SS^2;
-        
+        hyperparams.var_SS = std_SS^2;        
+
         % repeat experiments to reduce the effect of randomness
         for i3 = 1:M
             
             fprintf('\nReplication %d for J = %d and epsilon = %.2f \n', i3, J, epsilon);
             
-            %% Generate the distributed data
-            Sd = cell(1, J);
-            Zd = cell(1, J);
+            % Generate the noisy observations
             Sd_obs = cell(1, J);
             Zd_obs = cell(1, J);
             SSd_obs = zeros(D, J);
 
             for j = 1:J
-                node_rows = N_node_cumul(j)+1:N_node_cumul(j+1);
-
-                X_node = X_train(node_rows, :);
-                Y_node = Y_train(node_rows);
-
-                % construct S = X'X
-                Sd{j} = X_node'*X_node;
-                % construct Z = X'y
-                Zd{j} = X_node'*Y_node;
-                % construct Y^TY
-                Y2 = Y_node'*Y_node;
-
                 %%% A. sample the noisy versions of S and Y
                 % sample the noisy versions of S and Y
                 upper_temp_Z = triu(randn(d),1);
@@ -187,7 +223,8 @@ for i1 = 1:L_J
                 Zd_obs{j} = Zd{j} + noise_Z;
                 
                 %%% B. construct noisy version for Bernstein&Sheldon
-                SSd = [Sd{j}(:); Zd{j}(:); Y2];
+                SSd = [Sd{j}(:); Zd{j}(:); Y2d{j}];
+
                 % construct the noisy version of SS = [S, Z, YTY]
                 upper_temp_Z = triu(randn(d), 1);
                 lower_temp_Z = upper_temp_Z';
@@ -224,6 +261,11 @@ for i1 = 1:L_J
                 outputs = MCMC_DP_LR(Sd_obs, Zd_obs, init_vars, hyperparams, MCMC_prop_params, N_node, K, 1);
                 Time_reps(i1, i2, i3, 1) = toc;
                 theta_samps{1} = outputs.theta_vec(:, t_burn+1:end);
+
+                mu_thetas{i1, i2, i3, 1} = mean(theta_samps{1}, 2);
+                cov_thetas{i1, i2, i3, 1} = cov(theta_samps{1}');
+                Theta_samps{i1, i2, i3, 1} = theta_samps{1};
+
             end
 
             %%%%%%%%%%%%%%%%%%%%%%%% Method 2: MCMC-fixedS %%%%%
@@ -233,6 +275,10 @@ for i1 = 1:L_J
                 outputs = MCMC_DP_LR(Sd_obs, Zd_obs, init_vars, hyperparams, MCMC_prop_params, N_node, K, 0);
                 Time_reps(i1, i2, i3, 2) = toc;
                 theta_samps{2} = outputs.theta_vec(:, t_burn+1:end);
+
+                mu_thetas{i1, i2, i3, 2} = mean(theta_samps{2}, 2);
+                cov_thetas{i1, i2, i3, 2} = cov(theta_samps{2}');
+                Theta_samps{i1, i2, i3, 2} = theta_samps{2};
             end
 
             %%%%%%%%%%%%%%%%%%%%%%%% Method 3: ADASSP %%%%%%%%%%%%%%%%%%%%
@@ -242,15 +288,22 @@ for i1 = 1:L_J
                 theta_est = adaSSP(Sd, Zd, DP_params);
                 Time_reps(i1, i2, i3, 3) = toc;
                 theta_samps{3} = theta_est;
+
+                mu_thetas{i1, i2, i3, 3} = mean(theta_samps{3}, 2);
+                cov_thetas{i1, i2, i3, 3} = cov(theta_samps{3}');
+                Theta_samps{i1, i2, i3, 3} = theta_samps{3};
             end
 
             %%%%%%%%%%%%%%%%%%%%%%%% Method 4: Bayes-fixedS-fast %%%%%%%%
             if algo_to_run(4) == 1
                 fprintf('Implementing Bayesian adaSSP v2... \n');
                 tic;
-                theta_est = Fast_Bayesian_DP_LR(Sd_obs, Zd_obs, DP_params, hyperparams);
+                [theta_est, theta_cov_est] = Fast_Bayesian_DP_LR(Sd_obs, Zd_obs, DP_params, hyperparams);
                 Time_reps(i1, i2, i3, 4) = toc;
                 theta_samps{4} = theta_est;
+                mu_thetas{i1, i2, i3, 4} = theta_est;
+                cov_thetas{i1, i2, i3, 4} = theta_cov_est;
+                Theta_samps{i1, i2, i3, 4} = theta_est;
             end
 
             %%%%%%%%%%%%%%%%%%%%%%%% Method 5: MCMC-B&S %%%%%
@@ -260,6 +313,10 @@ for i1 = 1:L_J
                 [outputs] = MCMC_DP_LR_BS(SSd_obs, init_vars, hyperparams, N_node, K);
                 Time_reps(i1, i2, i3, 5) = toc;
                 theta_samps{5} = outputs.theta_vec(:,t_burn+1:end);
+                mu_thetas{i1, i2, i3, 5} = mean(theta_samps{5}, 2);
+                cov_thetas{i1, i2, i3, 5} = cov(theta_samps{5}');
+                Theta_samps{i1, i2, i3, 5} = theta_samps{5};
+                
             end
 
             %% Calculate the errors
@@ -278,6 +335,7 @@ for i1 = 1:L_J
                     end
                 end
             end
+
         end
     end
 end

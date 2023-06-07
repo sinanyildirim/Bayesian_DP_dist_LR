@@ -1,4 +1,4 @@
-function theta = Fast_Bayesian_DP_LR(S_obs, Z_obs, DP_params, hyperparams)
+function [mu_theta, Cov_theta] = Fast_Bayesian_DP_LR(S_obs, Z_obs, DP_params, hyperparams)
 
 % theta = Fast_Bayesian_DP_LR(S_obs, Z_obs, DP_params, hyperparams)
 % 
@@ -23,4 +23,5 @@ for j = 1:J
     Sigma_mean_post_theta = Sigma_mean_post_theta + S0*((S0*var_y + eye(d)*var_Z)\Z_obs{j});
 end
 
-theta = Sigma_inv\Sigma_mean_post_theta;
+mu_theta = Sigma_inv\Sigma_mean_post_theta;
+Cov_theta = eye(d)/Sigma_inv;

@@ -4,19 +4,25 @@ function [outputs] = MCMC_DP_LR_BS(SS_obs, init_vars, hyperparams, N_node, K)
 % 
 % Implements MCMC-BS
 
+% number of nodes
 J = length(N_node);
 
-Lambda = hyperparams.Lambda;
-kappa = hyperparams.kappa;
-var_SS = hyperparams.var_SS;
-
+% initial values
 theta = init_vars.theta;
 d = length(theta);
 var_y = init_vars.var_y;
 SS = init_vars.SS;
 
+% hyperparameters for Sigma_x
+Lambda = hyperparams.Lambda;
+kappa = hyperparams.kappa;
+
+% DP noise variance
+var_SS = hyperparams.var_SS;
+
+% hyperparameters for theta and var_y
 mu_0 = hyperparams.m;
-lambda_0 = hyperparams.C;
+lambda_0 = hyperparams.lambda_0;
 a_0 = hyperparams.a;
 b_0 = hyperparams.b;
 
@@ -110,7 +116,6 @@ for k = 1:K
     % Store the variables
     theta_vec(:, k) = theta;
     var_y_vec(k) = var_y;
-
 end
 
 %% Store outputs

@@ -1,7 +1,7 @@
-function [theta] = adaSSP(S, Z, DP_params)
+function [theta, S_prime, Z_prime] = adaSSP(S, Z, DP_params)
 
-% [theta] = adaSSP(S, Z, DP_params)
-%
+% [theta, S_prime, Z_prime] = adaSSP(S, Z, DP_params)
+% 
 % Implements adaSSP
 
 bound_X = DP_params.bound_X;
@@ -12,6 +12,14 @@ p = DP_params.p;
 
 J = length(S);
 d = size(S{1}, 1);
+
+S_prime = cell(1,J);
+Z_prime = cell(1,J);
+
+
+% sigma0 = classical_Gauss_mech(epsilon/3, delta/3);
+% std_Z = sigma0*bound_X*bound_Y;
+% std_S = sigma0*bound_X^2;
 
 % calculate the noise std's
 sigma0 = analytic_Gaussian_mech(epsilon/3, delta/3);
@@ -25,8 +33,10 @@ lambda = zeros(1, J);
 for j = 1:J
     lambda_min = min(eig(S{j}));
     
-    lambda_release = max(lambda_min + sqrt(log(6/delta))/(epsilon/3)*(bound_X^2)*randn - log(6/delta)/(epsilon/3)*(bound_X^2), 0);
-    lambda(j) = max(0, sqrt(d*log(6/delta)*log(2*d^2/p))*bound_X^2/(epsilon/3) - lambda_release);
+    lambda_release = max(lambda_min + sqrt(log(6/delta))/(epsilon/3)*(bound_X^2)*randn ...
+        - log(6/delta)/(epsilon/3)*(bound_X^2), 0);
+    lambda(j) = max(0, sqrt(d*log(6/delta)*log(2*d^2/p))*bound_X^2/(epsilon/3)...
+        - lambda_release);
 
     upper_temp_Z = triu(randn(d), 1);
     lower_temp_Z = upper_temp_Z';
@@ -34,8 +44,11 @@ for j = 1:J
     noise_Z = std_Z*randn(d, 1);
     
     % observations
-    S_total = S_total + S{j} + noise_S;
-    Z_total = Z_total + Z{j} + noise_Z;
+    S_prime{j} = S{j} + noise_S;
+    Z_prime{j} = Z{j} + noise_Z;
+
+    S_total = S_total + S_prime{j};
+    Z_total = Z_total + Z_prime{j};
 end
 
 theta = (S_total + sum(lambda)*eye(d))\Z_total;

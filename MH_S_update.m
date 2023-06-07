@@ -1,7 +1,8 @@
 function [S, decision] = MH_S_update(S, N, S_obs, Z_obs, theta, Sigma, var_y, var_S, var_Z, a)
 
-% [S, decision] = MH_S_update(N, S_obs, Z_obs, theta, S, Sigma, var_y, 
-% var_S, var_Z, prop_mech, prop_params)
+% [S, decision] = MH_S_update(S, N, S_obs, Z_obs, theta, Sigma, var_y, var_S, var_Z, a)
+% 
+% MH update for S
 
 % prepare the indices of the upper diagonal
 d = length(theta);

@@ -7,7 +7,7 @@ function [mu_S, Cov_S] = moments_S_norm(C, theta, var_y)
 
 d = size(C, 1);
 % theta = zeros(d, 1);
-[~, S11] = fourth_central_moment_norm(C);
+[~, ~, S11] = fourth_central_moment_norm(C);
 
 Theta_mtx = kron(eye(d), theta);
 S12 = S11*Theta_mtx;
